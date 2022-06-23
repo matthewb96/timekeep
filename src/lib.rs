@@ -7,10 +7,14 @@ mod tests {
     }
 }
 
-pub use activities::Activity;
-pub use activities::CurrentActivity;
+pub use tasks::Task;
+pub use tasks::CurrentTask;
 
-pub mod activities {
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const NAME: &str = env!("CARGO_PKG_NAME");
+pub const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
+
+pub mod tasks {
     use std::fs;
     use std::io::Error;
     use std::path::Path;
@@ -18,30 +22,30 @@ pub mod activities {
     use chrono::{DateTime, Duration, Utc};
     use serde::{Deserialize, Serialize};
 
-    /// Activity which started at a certain time but is still ongoing.
+    /// Task which started at a certain time but is still ongoing.
     ///
-    /// See `Activity` for finished activities.
+    /// See `Task` for finished tasks.
     #[derive(Debug, Serialize, Deserialize)]
-    pub struct CurrentActivity {
+    pub struct CurrentTask {
         task_name: String,
         start: DateTime<Utc>,
         description: Option<String>,
     }
 
-    impl CurrentActivity {
-        pub fn start(task_name: String, description: Option<String>) -> CurrentActivity {
-            CurrentActivity {
+    impl CurrentTask {
+        pub fn start(task_name: String, description: Option<String>) -> CurrentTask {
+            CurrentTask {
                 task_name,
                 start: Utc::now(),
                 description,
             }
         }
 
-        pub fn end(self) -> Activity {
-            Activity::from(self)
+        pub fn end(self) -> Task {
+            Task::from(self)
         }
 
-        pub fn save(self, file: &Path) -> Result<CurrentActivity, Error> {
+        pub fn save(self, file: &Path) -> Result<CurrentTask, Error> {
             let json = serde_json::to_string(&self)?;
 
             fs::write(file, json)?;
@@ -49,25 +53,25 @@ pub mod activities {
         }
     }
 
-    /// Activity which started at a certain time and has already finished.
+    /// Task which started at a certain time and has already finished.
     ///
     /// Contains an optional description for more details.
     #[derive(Debug, Serialize, Deserialize)]
-    pub struct Activity {
+    pub struct Task {
         task_name: String,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
         description: Option<String>,
     }
 
-    impl Activity {
+    impl Task {
         pub fn new(
             task_name: String,
             start: DateTime<Utc>,
             end: DateTime<Utc>,
             description: Option<String>,
-        ) -> Activity {
-            Activity {
+        ) -> Task {
+            Task {
                 task_name,
                 start,
                 end,
@@ -80,10 +84,10 @@ pub mod activities {
         }
     }
 
-    impl From<CurrentActivity> for Activity {
+    impl From<CurrentTask> for Task {
         /// Uses current time as the activity end time when converting.
-        fn from(activity: CurrentActivity) -> Activity {
-            Activity {
+        fn from(activity: CurrentTask) -> Task {
+            Task {
                 task_name: activity.task_name,
                 start: activity.start,
                 end: Utc::now(),
@@ -93,8 +97,8 @@ pub mod activities {
     }
 }
 
-mod tasks {
-    struct Task {
+mod projects {
+    struct Project {
         name: String,
         description: Option<String>,
     }

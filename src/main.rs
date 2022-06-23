@@ -2,7 +2,7 @@ use std::fs;
 
 use chrono::Utc;
 use directories::BaseDirs;
-use timekeep::{Activity, CurrentActivity};
+use timekeep::{CurrentTask, Task};
 
 const DATA_DIRECTORY: &str = "timekeep";
 const CURRENT_ACTIVITY_FILE: &str = "current.json";
@@ -16,7 +16,7 @@ fn main() {
     }
     let current_file = data_folder.join(CURRENT_ACTIVITY_FILE);
 
-    let mut activity = CurrentActivity::start(String::from("test"), None);
+    let mut activity = CurrentTask::start(String::from("test"), None);
 
     dbg!(&activity);
     activity = activity
@@ -29,7 +29,7 @@ fn main() {
 
     let today = Utc::today();
 
-    let custom = Activity::new(
+    let custom = Task::new(
         String::from("custom task"),
         today.and_hms(11, 30, 0),
         today.and_hms(12, 14, 12),
