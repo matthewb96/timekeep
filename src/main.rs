@@ -1,11 +1,38 @@
-use std::fs;
+use std::{fs, path::Path};
 
-use chrono::Utc;
+use clap::{Parser, Subcommand};
 use directories::BaseDirs;
-use timekeep::{CurrentTask, Task};
+use timekeep::{tasks, CurrentTask, Task};
 
 const DATA_DIRECTORY: &str = "timekeep";
 const CURRENT_ACTIVITY_FILE: &str = "current.json";
+
+#[derive(Parser)]
+#[clap(author, version, about, long_about = None)]
+#[clap(propagate_version = true)]
+struct Cli {
+    #[clap(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Start a new task now, ending and saving any currently running tasks
+    Start {
+        /// Project name for the task
+        project_name: String,
+        /// Optional task description
+        #[clap(short, long)]
+        description: Option<String>,
+        /// Overwrite current task instead of ending that and starting a new one
+        #[clap(short, long, action)]
+        overwrite: bool,
+    },
+    /// Save and end the current task
+    End,
+    /// Add a task with given start and end time
+    Add,
+}
 
 fn main() {
     let base_dirs = BaseDirs::new().unwrap();
@@ -14,27 +41,34 @@ fn main() {
         let folder = data_folder.display().to_string();
         fs::create_dir_all(&data_folder).expect(&folder);
     }
+    let cli = Cli::parse();
+
     let current_file = data_folder.join(CURRENT_ACTIVITY_FILE);
 
-    let mut activity = CurrentTask::start(String::from("test"), None);
+    match &cli.command {
+        Commands::Start {
+            project_name,
+            description,
+            overwrite,
+        } => {
+            if *overwrite {
+                // End current task before starting a new one
+                match tasks::end_current_task(&current_file) {
+                    Ok(Some(task)) => println!("Ended task: {:?}", task),
+                    Ok(None) => (),
+                    Err(err) => eprintln!("Error when attempting to end current task: {}", err),
+                }
+            }
 
-    dbg!(&activity);
-    activity = activity
-        .save(&current_file)
-        .expect("Error saving current activity");
-
-    let activity = activity.end();
-    dbg!(&activity);
-    dbg!(activity.duration());
-
-    let today = Utc::today();
-
-    let custom = Task::new(
-        String::from("custom task"),
-        today.and_hms(11, 30, 0),
-        today.and_hms(12, 14, 12),
-        Some(String::from("more info about this activity")),
-    );
-    dbg!(&custom);
-    dbg!(custom.duration());
+            let task = tasks::start_task(project_name, description.as_ref(), &current_file)
+                .expect("oh crap");
+            println!("Started task: {:?}", task);
+        }
+        Commands::End => match tasks::end_current_task(&current_file) {
+            Ok(Some(task)) => println!("Ended task: {:?}", task),
+            Ok(None) => println!("No current task to end"),
+            Err(err) => eprintln!("Error when attempting to end current task: {}", err),
+        },
+        Commands::Add => println!("Not yet implemented"),
+    };
 }
