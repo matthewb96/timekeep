@@ -1,8 +1,8 @@
-use std::{fs, path::Path};
+use std::fs;
 
 use clap::{Parser, Subcommand};
 use directories::BaseDirs;
-use timekeep::{tasks, CurrentTask, Task};
+use timekeep::{tasks, CurrentTask};
 
 const DATA_DIRECTORY: &str = "timekeep";
 const CURRENT_ACTIVITY_FILE: &str = "current.json";
@@ -32,6 +32,8 @@ enum Commands {
     End,
     /// Add a task with given start and end time
     Add,
+    /// View current task or a group of tasks based on options given
+    View, // TODO Implement options for different views
 }
 
 fn main() {
@@ -54,21 +56,25 @@ fn main() {
             if *overwrite {
                 // End current task before starting a new one
                 match tasks::end_current_task(&current_file) {
-                    Ok(Some(task)) => println!("Ended task: {:?}", task),
+                    Ok(Some(t)) => println!("Ended task: {}", t),
                     Ok(None) => (),
                     Err(err) => eprintln!("Error when attempting to end current task: {}", err),
                 }
             }
 
-            let task = tasks::start_task(project_name, description.as_ref(), &current_file)
+            let t = tasks::start_task(project_name, description.as_ref(), &current_file)
                 .expect("oh crap");
-            println!("Started task: {:?}", task);
+            println!("Started task: {}", t);
         }
         Commands::End => match tasks::end_current_task(&current_file) {
-            Ok(Some(task)) => println!("Ended task: {:?}", task),
+            Ok(Some(t)) => println!("Ended task: {}", t),
             Ok(None) => println!("No current task to end"),
-            Err(err) => eprintln!("Error when attempting to end current task: {}", err),
+            Err(e) => eprintln!("Error when attempting to end current task: {}", e),
         },
         Commands::Add => println!("Not yet implemented"),
+        Commands::View => match CurrentTask::load(&current_file) {
+            Ok(t) => println!("Current task: {}", t),
+            Err(e) => eprintln!("Error when attempting to read current task: {}", e),
+        },
     };
 }
