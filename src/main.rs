@@ -1,11 +1,14 @@
-use std::fs;
+use std::{fs, path::Path};
 
+use anyhow::{Ok, Result};
 use clap::{Parser, Subcommand};
 use directories::BaseDirs;
+
 use timekeep::{tasks, CurrentTask};
 
 const DATA_DIRECTORY: &str = "timekeep";
 const CURRENT_ACTIVITY_FILE: &str = "current.json";
+const DATABASE_FILE: &str = "timekeep.db";
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -25,7 +28,7 @@ enum Commands {
         #[clap(short, long)]
         description: Option<String>,
         /// Overwrite current task instead of ending that and starting a new one
-        #[clap(short, long, action)]
+        #[clap(short, long)]
         overwrite: bool,
     },
     /// Save and end the current task
@@ -36,7 +39,44 @@ enum Commands {
     View, // TODO Implement options for different views
 }
 
-fn main() {
+pub fn start(
+    current_file: &Path,
+    project_name: &str,
+    description: &Option<String>,
+    overwrite: &bool,
+    database_file: &Path,
+) -> Result<()> {
+    if !*overwrite {
+        // End current task before starting a new one
+        match tasks::end_current_task(&current_file, &database_file)? {
+            Some(t) => println!("Ended task: {}", t),
+            None => (),
+        }
+    }
+
+    let t = tasks::start_task(project_name, description.as_ref(), &current_file)?;
+    println!("Started task: {}", t);
+
+    Ok(())
+}
+
+pub fn end(current_file: &Path, database_file: &Path) -> Result<()> {
+    match tasks::end_current_task(&current_file, &database_file)? {
+        Some(t) => println!("Ended task: {}", t),
+        None => println!("No current task to end"),
+    };
+
+    Ok(())
+}
+
+pub fn view(current_file: &Path, database_file: &Path) -> Result<()> {
+    let t = CurrentTask::load(&current_file)?;
+    println!("Current task: {}", t);
+
+    Ok(())
+}
+
+fn main() -> Result<()> {
     let base_dirs = BaseDirs::new().unwrap();
     let data_folder = base_dirs.data_dir().join(DATA_DIRECTORY);
     if !data_folder.exists() {
@@ -46,35 +86,24 @@ fn main() {
     let cli = Cli::parse();
 
     let current_file = data_folder.join(CURRENT_ACTIVITY_FILE);
+    let database_file = data_folder.join(DATABASE_FILE);
 
     match &cli.command {
         Commands::Start {
             project_name,
             description,
             overwrite,
-        } => {
-            if *overwrite {
-                // End current task before starting a new one
-                match tasks::end_current_task(&current_file) {
-                    Ok(Some(t)) => println!("Ended task: {}", t),
-                    Ok(None) => (),
-                    Err(err) => eprintln!("Error when attempting to end current task: {}", err),
-                }
-            }
-
-            let t = tasks::start_task(project_name, description.as_ref(), &current_file)
-                .expect("oh crap");
-            println!("Started task: {}", t);
-        }
-        Commands::End => match tasks::end_current_task(&current_file) {
-            Ok(Some(t)) => println!("Ended task: {}", t),
-            Ok(None) => println!("No current task to end"),
-            Err(e) => eprintln!("Error when attempting to end current task: {}", e),
-        },
+        } => start(
+            &current_file,
+            project_name,
+            description,
+            overwrite,
+            &database_file,
+        )?,
+        Commands::End => end(&current_file, &database_file)?,
         Commands::Add => println!("Not yet implemented"),
-        Commands::View => match CurrentTask::load(&current_file) {
-            Ok(t) => println!("Current task: {}", t),
-            Err(e) => eprintln!("Error when attempting to read current task: {}", e),
-        },
+        Commands::View => view(&current_file, &database_file)?,
     };
+
+    Ok(())
 }

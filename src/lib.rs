@@ -88,12 +88,14 @@ pub fn human_duration(d: Duration) -> String {
 }
 
 pub mod tasks {
-    use std::io::Error;
     use std::path::Path;
     use std::{fmt, fs};
 
+    use anyhow::Result;
     use chrono::{DateTime, Duration, Utc};
     use serde::{Deserialize, Serialize};
+
+    use crate::database;
 
     /// Task which started at a certain time but is still ongoing.
     ///
@@ -118,14 +120,14 @@ pub mod tasks {
             Task::from(self)
         }
 
-        pub fn save(self, file: &Path) -> Result<CurrentTask, Error> {
+        pub fn save(self, file: &Path) -> Result<CurrentTask> {
             let json = serde_json::to_string(&self)?;
 
             fs::write(file, json)?;
             Ok(self)
         }
 
-        pub fn load(file: &Path) -> Result<CurrentTask, Error> {
+        pub fn load(file: &Path) -> Result<CurrentTask> {
             let json = fs::read_to_string(file)?;
 
             let task: CurrentTask = serde_json::from_str(&json)?;
@@ -178,6 +180,22 @@ pub mod tasks {
         pub fn duration(&self) -> Duration {
             self.end_time - self.start_time
         }
+
+        pub fn project_name(&self) -> &str {
+            &self.project_name
+        }
+
+        pub fn start_time(&self) -> &DateTime<Utc> {
+            &self.start_time
+        }
+
+        pub fn end_time(&self) -> &DateTime<Utc> {
+            &self.end_time
+        }
+
+        pub fn description(&self) -> Option<&str> {
+            self.description.as_deref()
+        }
     }
 
     impl From<CurrentTask> for Task {
@@ -209,24 +227,82 @@ pub mod tasks {
         project_name: &str,
         description: Option<&String>,
         current_file: &Path,
-    ) -> Result<CurrentTask, std::io::Error> {
+    ) -> Result<CurrentTask> {
         let description: Option<String> = match description {
             Some(d) => Some(d.to_string()),
             None => None,
         };
         let task = CurrentTask::start(project_name.to_string(), description);
-        task.save(&current_file)
+        Ok(task.save(&current_file)?)
     }
 
-    pub fn end_current_task(current_file: &Path) -> Result<Option<Task>, std::io::Error> {
+    pub fn end_current_task(current_file: &Path, database_file: &Path) -> Result<Option<Task>> {
         if !current_file.exists() {
             return Ok(None);
         };
 
         let task = CurrentTask::load(&current_file)?;
         let task = task.end();
+        database::append_task(&database_file, &task)?;
+
         fs::remove_file(current_file)?;
         Ok(Some(task))
+    }
+}
+
+pub mod database {
+    use std::path::Path;
+
+    use crate::tasks::Task;
+    use anyhow::Result;
+    use rusqlite::{params, Connection};
+
+    fn table_exists(file: &Path, table: &str) -> Result<bool> {
+        let connection = Connection::open(&file)?;
+
+        let rows = connection.execute(
+            &format!("SELECT name FROM sqlite_master WHERE type='table' AND name='{}';", &table),
+            [],
+        )?;
+        dbg!(&rows);
+        Ok(rows == 1)
+    }
+
+    fn create_tasks_table(file: &Path) -> Result<()> {
+        let connection = Connection::open(&file)?;
+
+        connection.execute(
+            "CREATE TABLE tasks (
+                project_name    TEXT NOT NULL,
+                start_time      TEXT NOT NULL,
+                end_time        TEXT NOT NULL,
+                description     TEXT
+            );",
+            [],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn append_task(file: &Path, task: &Task) -> Result<()> {
+        let connection = Connection::open(&file)?;
+        println!("doining stuff");
+        if !table_exists(&file, "tasks")? {
+            println!("creating table");
+            create_tasks_table(&file)?;
+        };
+
+        connection.execute(
+            "INSERT INTO tasks VALUES (?1, ?2, ?3, ?4)",
+            params![
+                task.project_name(),
+                task.start_time().to_rfc3339(),
+                task.end_time().to_rfc3339(),
+                task.description()
+            ],
+        )?;
+
+        Ok(())
     }
 }
 
