@@ -18,7 +18,12 @@ fn main() -> Result<()> {
             overwrite,
         } => cli::start(&files, project_name, description, overwrite)?,
         Commands::End => cli::end(&files)?,
-        Commands::Add => println!("Not yet implemented"),
+        Commands::Add {
+            project_name,
+            start_time,
+            end_time,
+            description,
+        } => cli::add(&files, project_name, start_time, end_time, description)?,
         Commands::View => cli::view(&files)?,
     };
 

@@ -8,18 +8,20 @@ use rusqlite::{params, Connection, OptionalExtension};
 fn table_exists(file: &Path, table: &str) -> Result<bool> {
     let connection = Connection::open(&file)?;
 
-    let rows: Option<()> = connection.query_row(
-        &format!(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='{}';",
-            &table
-        ),
-        [],
-        |_| Ok(())
-    ).optional()?;
-    
+    let rows: Option<()> = connection
+        .query_row(
+            &format!(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='{}';",
+                &table
+            ),
+            [],
+            |_| Ok(()),
+        )
+        .optional()?;
+
     match rows {
         Some(_) => Ok(true),
-        None => Ok(false)
+        None => Ok(false),
     }
 }
 
@@ -41,9 +43,7 @@ fn create_tasks_table(file: &Path) -> Result<()> {
 
 pub fn append_task(file: &Path, task: &Task) -> Result<()> {
     let connection = Connection::open(&file)?;
-    println!("doining stuff");
     if !table_exists(&file, "tasks")? {
-        println!("creating table");
         create_tasks_table(&file)?;
     };
 
