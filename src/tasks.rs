@@ -8,52 +8,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::database;
 
-/// Divides two integers and rounds result to nearest integer
-///
-/// # Examples
-/// ```
-/// use timekeep::rounded_div;
-///
-/// let tests = [
-///     (3, 2, 2),   // 3 / 2 = 1.5    -> 2
-///     (2, 3, 1),   // 2 / 3 = 0.66   -> 1
-///     (1, 2, 1),   // 1 / 2 = 0.5    -> 1
-///     (1, 3, 0),   // 1 / 3 = 0.33   -> 0
-///     (-3, 2, -2), // -3 / 2 = -1.5  -> -2
-///     (-2, -3, 1), // -2 / -3 = 0.66 -> 1
-///     (1, -2, 1),  // 1 / -2 = -0.5  -> -1
-///     (-1, 3, 0),  // -1 / 3 = 0.33  -> 0
-/// ];
-///
-/// for (n, d, a) in tests {
-///     assert_eq!(rounded_div(n, d), a, "testing: rounded_div({}, {}) == {}", n, d, a);
-/// }
-/// ```
+/// Divides two integers and rounds result towards nearest integer.
+/// 
+/// Values ending in .5 are rounded up to the larger integer.
 fn rounded_div(numerator: i64, denominator: i64) -> i64 {
     (numerator + (denominator / 2)) / denominator
 }
 
 /// Format duration as a human readable string.
-///
-/// # Examples
-/// ```
-/// use chrono::Duration;
-/// use timekeep::human_duration;
-///
-/// let durations = [
-///     (Duration::milliseconds(947), "947 milliseconds"),
-///     (Duration::milliseconds(1947), "2 seconds"),
-///     (Duration::seconds(57), "57 seconds"),
-///     (Duration::seconds(157), "2 minutes 37 seconds"),
-///     (Duration::seconds(4734), "1 hours 19 minutes"),
-///     (Duration::seconds(92750), "1 days 2 hours"),
-///     (Duration::hours(173), "7 days 5 hours"),
-/// ];
-///
-/// for (d, a) in durations {
-///     assert_eq!(human_duration(d), a, "testing: human_duration({}) == {}", d, a);
-/// }
-/// ```
 fn human_duration(d: Duration) -> String {
     let milli = d.num_milliseconds();
     if milli < 1000 {
@@ -279,4 +241,59 @@ pub fn end_current_task(
 
     fs::remove_file(current_file)?;
     Ok(Some(task))
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Duration;
+
+    use super::{human_duration, rounded_div};
+
+    #[test]
+    fn test_rounded_div() {
+        let tests = [
+            (3, 2, 2),   // 3 / 2 = 1.5    -> 2
+            (2, 3, 1),   // 2 / 3 = 0.66   -> 1
+            (1, 2, 1),   // 1 / 2 = 0.5    -> 1
+            (1, 3, 0),   // 1 / 3 = 0.33   -> 0
+            (-3, 2, -1), // -3 / 2 = -1.5  -> -1
+            (-2, -3, 1), // -2 / -3 = 0.66 -> 1
+            (1, -2, 0),  // 1 / -2 = -0.5  -> 0
+            (-1, 3, 0),  // -1 / 3 = 0.33  -> 0
+        ];
+
+        for (n, d, a) in tests {
+            assert_eq!(
+                rounded_div(n, d),
+                a,
+                "testing: rounded_div({}, {}) == {}",
+                n,
+                d,
+                a
+            );
+        }
+    }
+
+    #[test]
+    fn test_human_readable() {
+        let durations = [
+            (Duration::milliseconds(947), "947 milliseconds"),
+            (Duration::milliseconds(1947), "2 seconds"),
+            (Duration::seconds(57), "57 seconds"),
+            (Duration::seconds(157), "2 minutes 37 seconds"),
+            (Duration::seconds(4734), "1 hours 19 minutes"),
+            (Duration::seconds(92750), "1 days 2 hours"),
+            (Duration::hours(173), "7 days 5 hours"),
+        ];
+
+        for (d, a) in durations {
+            assert_eq!(
+                human_duration(d),
+                a,
+                "testing: human_duration({}) == {}",
+                d,
+                a
+            );
+        }
+    }
 }
