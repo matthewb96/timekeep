@@ -93,6 +93,18 @@ pub struct CurrentTask {
 }
 
 impl CurrentTask {
+    pub fn new(
+        project_name: String,
+        start_time: DateTime<Utc>,
+        description: Option<String>,
+    ) -> CurrentTask {
+        CurrentTask {
+            project_name,
+            start_time,
+            description,
+        }
+    }
+
     pub fn start(project_name: String, description: Option<String>) -> CurrentTask {
         CurrentTask {
             project_name,
@@ -210,6 +222,7 @@ impl fmt::Display for Task {
 
 pub fn start_task(
     project_name: &str,
+    start_time: Option<DateTime<Utc>>,
     description: Option<&String>,
     current_file: &Path,
 ) -> Result<CurrentTask> {
@@ -217,7 +230,12 @@ pub fn start_task(
         Some(d) => Some(d.to_string()),
         None => None,
     };
-    let task = CurrentTask::start(project_name.to_string(), description);
+
+    let task = match start_time {
+        Some(st) => CurrentTask::new(project_name.to_string(), st, description),
+        None => CurrentTask::start(project_name.to_string(), description),
+    };
+
     Ok(task.save(&current_file)?)
 }
 

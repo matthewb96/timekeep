@@ -19,10 +19,13 @@ pub enum Commands {
     Start {
         /// Project name for the task
         project_name: String,
+        /// Optional start time, if not given then current time is used
+        #[clap(short, long)]
+        start_time: Option<String>,
         /// Optional task description
         #[clap(short, long)]
         description: Option<String>,
-        /// Overwrite current task instead of ending that and starting a new one
+        /// Overwrite current task instead of ending it and starting a new one
         #[clap(short, long)]
         overwrite: bool,
     },
@@ -48,6 +51,7 @@ pub enum Commands {
 pub fn start(
     files: &DataFiles,
     project_name: &str,
+    start_time: &Option<String>,
     description: &Option<String>,
     overwrite: &bool,
 ) -> Result<()> {
@@ -59,7 +63,17 @@ pub fn start(
         }
     }
 
-    let t = tasks::start_task(project_name, description.as_ref(), files.current_file())?;
+    let start_time = match &start_time {
+        Some(st) => Some(parse_local_datetime(st)?),
+        None => None,
+    };
+
+    let t = tasks::start_task(
+        project_name,
+        start_time,
+        description.as_ref(),
+        files.current_file(),
+    )?;
     println!("Started task: {}", t);
 
     Ok(())
