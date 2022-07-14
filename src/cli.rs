@@ -1,6 +1,6 @@
 //! Functionality for the command-line interface.
 use anyhow::Result;
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use clap::{Parser, Subcommand};
 
 use crate::{database, tasks, CurrentTask, DataFiles, Task};
@@ -44,6 +44,7 @@ pub enum Commands {
     View, // TODO Implement options for different views
 }
 
+// TODO Add optional argument for start time to start the current task earlier than now
 pub fn start(
     files: &DataFiles,
     project_name: &str,
@@ -64,6 +65,7 @@ pub fn start(
     Ok(())
 }
 
+// TODO Add optional argument for end time which will be used instead of ending the task now
 pub fn end(files: &DataFiles) -> Result<()> {
     match tasks::end_current_task(files.current_file(), files.database_file())? {
         Some(t) => println!("Ended task: {}", t),
@@ -74,9 +76,24 @@ pub fn end(files: &DataFiles) -> Result<()> {
 }
 
 /// Parse datetime string which doesn't include timezone, use local timezone.
-fn parse_local_time(datetime: &str) -> Result<DateTime<Utc>> {
-    let datetime = NaiveDateTime::parse_from_str(datetime, "%Y-%m-%d %H:%M:%S")
-        .or(NaiveDateTime::parse_from_str(datetime, "%Y-%m-%d %H:%M"))?;
+///
+/// If date isn't given then today is used.
+fn parse_local_datetime(text: &str) -> Result<DateTime<Utc>> {
+    // Attempt to parse datetime and fallback on parsing only time
+    let datetime = NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")
+        .or(NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M"));
+
+    let datetime = match datetime {
+        Ok(dt) => dt,
+        Err(_) => {
+            // Parse string as time only and use today's date
+            let time = NaiveTime::parse_from_str(text, "%H:%M:%S")
+                .or(NaiveTime::parse_from_str(text, "%H:%M"))?;
+
+            NaiveDateTime::new(Utc::today().naive_utc(), time)
+        }
+    };
+
     Ok(Utc.from_local_datetime(&datetime).unwrap())
 }
 
@@ -87,8 +104,8 @@ pub fn add(
     end_time: &str,
     description: &Option<String>,
 ) -> Result<()> {
-    let start_time = parse_local_time(&start_time)?;
-    let end_time = parse_local_time(&end_time)?;
+    let start_time = parse_local_datetime(&start_time)?;
+    let end_time = parse_local_datetime(&end_time)?;
 
     let description: Option<String> = match description {
         Some(d) => Some(d.to_string()),
@@ -103,9 +120,69 @@ pub fn add(
     Ok(())
 }
 
+// TODO Add arguments for viewing different results from the database
 pub fn view(files: &DataFiles) -> Result<()> {
     let t = CurrentTask::load(files.current_file())?;
     println!("Current task: {}", t);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{NaiveDate, TimeZone, Utc};
+
+    /// Test parsing text with date and time.
+    #[test]
+    fn datetime_parse_valid() {
+        let mut tests = Vec::new();
+        tests.push((
+            "2022-02-01 13:14:15",
+            NaiveDate::from_ymd(2022, 2, 1).and_hms(13, 14, 15),
+        ));
+        tests.push((
+            "2022-02-01 01:02",
+            NaiveDate::from_ymd(2022, 2, 1).and_hms(1, 2, 0),
+        ));
+        tests.push((
+            "2022-2-1 1:2:3",
+            NaiveDate::from_ymd(2022, 2, 1).and_hms(1, 2, 3),
+        ));
+        tests.push((
+            "2022-2-1 1:2",
+            NaiveDate::from_ymd(2022, 2, 1).and_hms(1, 2, 0),
+        ));
+
+        for (s, t) in tests {
+            let t = Utc.from_local_datetime(&t).unwrap();
+
+            assert_eq!(
+                super::parse_local_datetime(s).unwrap(),
+                t,
+                "testing: parse_local_datetime({}) == {:?}",
+                s,
+                t
+            );
+        }
+    }
+
+    /// Test parsing text with time only.
+    #[test]
+    fn datetime_parse_time() {
+        let mut tests = Vec::new();
+        tests.push(("11:12:1", Utc::today().and_hms(11, 12, 1).naive_utc()));
+        tests.push(("11:12", Utc::today().and_hms(11, 12, 0).naive_utc()));
+
+        for (s, t) in tests {
+            let t = Utc.from_local_datetime(&t).unwrap();
+
+            assert_eq!(
+                super::parse_local_datetime(s).unwrap(),
+                t,
+                "testing: parse_local_datetime({}) == {:?}",
+                s,
+                t
+            );
+        }
+    }
 }
