@@ -2,7 +2,7 @@
 use std::path::Path;
 use std::{fmt, fs};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -111,6 +111,23 @@ impl CurrentTask {
             start_time: Utc::now(),
             description,
         }
+    }
+
+    pub fn end_with_time(self, time: DateTime<Utc>) -> Result<Task> {
+        if time < self.start_time {
+            return Err(anyhow!(
+                "task cannot have end time ({}) before start time ({})",
+                time.naive_local().format("%R %v").to_string(),
+                self.start_time.naive_local().format("%R %v").to_string()
+            ));
+        }
+
+        Ok(Task::new(
+            self.project_name,
+            self.start_time,
+            time,
+            self.description,
+        ))
     }
 
     pub fn end(self) -> Task {
@@ -239,14 +256,26 @@ pub fn start_task(
     Ok(task.save(&current_file)?)
 }
 
-pub fn end_current_task(current_file: &Path, database_file: &Path) -> Result<Option<Task>> {
+pub fn end_current_task(
+    current_file: &Path,
+    database_file: &Path,
+    end_time: Option<DateTime<Utc>>,
+    discard: bool,
+) -> Result<Option<Task>> {
     if !current_file.exists() {
         return Ok(None);
     };
 
     let task = CurrentTask::load(&current_file)?;
-    let task = task.end();
-    database::append_task(&database_file, &task)?;
+
+    let task = match end_time {
+        Some(t) => task.end_with_time(t)?,
+        None => task.end(),
+    };
+
+    if !discard {
+        database::append_task(&database_file, &task)?;
+    }
 
     fs::remove_file(current_file)?;
     Ok(Some(task))

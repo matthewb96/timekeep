@@ -30,7 +30,13 @@ pub enum Commands {
         overwrite: bool,
     },
     /// Save and end the current task
-    End,
+    End {
+        /// Optional end time, if not given current time is used
+        end_time: Option<String>,
+        /// End the current task and discard it (do not save it)
+        #[clap(short, long)]
+        discard: bool,
+    },
     /// Add a task with given start and end time
     Add {
         /// Project name for the task
@@ -45,9 +51,9 @@ pub enum Commands {
     },
     /// View current task or a group of tasks based on options given
     View, // TODO Implement options for different views
+          // TODO Add edit command
 }
 
-// TODO Add optional argument for start time to start the current task earlier than now
 pub fn start(
     files: &DataFiles,
     project_name: &str,
@@ -57,7 +63,7 @@ pub fn start(
 ) -> Result<()> {
     if !*overwrite {
         // End current task before starting a new one
-        match tasks::end_current_task(files.current_file(), files.database_file())? {
+        match tasks::end_current_task(files.current_file(), files.database_file(), None, false)? {
             Some(t) => println!("Ended task: {}", t),
             None => (),
         }
@@ -79,9 +85,18 @@ pub fn start(
     Ok(())
 }
 
-// TODO Add optional argument for end time which will be used instead of ending the task now
-pub fn end(files: &DataFiles) -> Result<()> {
-    match tasks::end_current_task(files.current_file(), files.database_file())? {
+pub fn end(files: &DataFiles, end_time: &Option<String>, discard: &bool) -> Result<()> {
+    let end_time = match &end_time {
+        Some(et) => Some(parse_local_datetime(et)?),
+        None => None,
+    };
+
+    match tasks::end_current_task(
+        files.current_file(),
+        files.database_file(),
+        end_time,
+        *discard,
+    )? {
         Some(t) => println!("Ended task: {}", t),
         None => println!("No current task to end"),
     };
