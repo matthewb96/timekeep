@@ -18,17 +18,14 @@ fn main() -> Result<()> {
             description,
             overwrite,
         } => cli::start(&files, project_name, start_time, description, overwrite)?,
-        Commands::End {
-            end_time,
-            discard
-        } => cli::end(&files, end_time, discard)?,
+        Commands::End { end_time, discard } => cli::end(&files, end_time, discard)?,
         Commands::Add {
             project_name,
             start_time,
             end_time,
             description,
         } => cli::add(&files, project_name, start_time, end_time, description)?,
-        Commands::View => cli::view(&files)?,
+        Commands::View { filter } => cli::view(&files, filter)?,
     };
 
     Ok(())

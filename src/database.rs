@@ -2,7 +2,8 @@
 use std::path::Path;
 
 use crate::tasks::Task;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 
 fn table_exists(file: &Path, table: &str) -> Result<bool> {
@@ -59,3 +60,41 @@ pub fn append_task(file: &Path, task: &Task) -> Result<()> {
 
     Ok(())
 }
+
+/// Parse datetime string in RFC3339 format and convert to UTC.
+fn parse_database_datetime(s: String) -> Result<DateTime<Utc>> {
+    Ok(DateTime::<Utc>::from(DateTime::parse_from_rfc3339(&s)?))
+}
+
+/// Extract all tasks from database.
+pub fn extract_all_tasks(file: &Path) -> Result<Vec<Task>> {
+    let connection = Connection::open(&file)?;
+
+    let mut stmt =
+        connection.prepare("SELECT project_name, start_time, end_time, description FROM tasks;")?;
+
+    let mut errors = vec![];
+    let tasks: Vec<Task> = stmt
+        .query_map([], |row| {
+            Ok(Task::new(
+                row.get(0)?,
+                parse_database_datetime(row.get(1)?).unwrap(),
+                parse_database_datetime(row.get(2)?).unwrap(),
+                row.get(3)?,
+            ))
+        })?
+        .filter_map(|x| x.map_err(|e| errors.push(e)).ok())
+        .collect();
+
+    if errors.len() > 0 {
+        return Err(anyhow!(
+            "error extracting tasks from database: {:#?}",
+            errors
+        ));
+    }
+
+    Ok(tasks)
+}
+
+// TODO Implement getting tasks based on date filter
+fn extract_tasks(file: &Path, from: DateTime<Utc>, to: DateTime<Utc>) {}

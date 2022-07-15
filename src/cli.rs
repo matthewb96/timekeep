@@ -1,7 +1,7 @@
 //! Functionality for the command-line interface.
 use anyhow::Result;
 use chrono::{DateTime, NaiveDateTime, NaiveTime, TimeZone, Utc};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::{database, tasks, CurrentTask, DataFiles, Task};
 
@@ -11,6 +11,16 @@ use crate::{database, tasks, CurrentTask, DataFiles, Task};
 pub struct Cli {
     #[clap(subcommand)]
     pub command: Commands,
+}
+
+#[derive(ValueEnum, Clone, Debug)]
+pub enum ViewFilter {
+    Current,
+    All,
+    Day,
+    Week,
+    Month,
+    Year,
 }
 
 #[derive(Subcommand)]
@@ -50,8 +60,12 @@ pub enum Commands {
         description: Option<String>,
     },
     /// View current task or a group of tasks based on options given
-    View, // TODO Implement options for different views
-          // TODO Add edit command
+    View {
+        /// Timescale filter for tasks to view
+        #[clap(value_enum, default_value_t = ViewFilter::Current)]
+        filter: ViewFilter,
+    },
+    // TODO Add edit command
 }
 
 pub fn start(
@@ -149,12 +163,32 @@ pub fn add(
     Ok(())
 }
 
-// TODO Add arguments for viewing different results from the database
-pub fn view(files: &DataFiles) -> Result<()> {
-    let t = CurrentTask::load(files.current_file())?;
-    println!("Current task: {}", t);
+// TODO Add arguments for viewing different results from the database based on start / end time
+pub fn view(files: &DataFiles, filter: &ViewFilter) -> Result<()> {
+    match filter {
+        ViewFilter::Current => {
+            let t = CurrentTask::load(files.current_file())?;
+            println!("Current task: {}", t);
+        }
+        ViewFilter::All => {
+            let t = database::extract_all_tasks(&files.database_file)?;
+            display_tasks(&t);
+        }
+        _ => println!("Not yet implemented view: {:?}", filter),
+    };
 
     Ok(())
+}
+
+/// Print tasks to screen in a simple table structure.
+fn display_tasks(tasks: &Vec<Task>) {
+    println!(
+        "| {: <17} | {: <17} | {: <15} | {: <25} | {:0.50}",
+        "From", "To", "Duration", "Project Name", "Description"
+    );
+    for t in tasks {
+        println!("{}", t);
+    }
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::database;
 
 /// Divides two integers and rounds result towards nearest integer.
-/// 
+///
 /// Values ending in .5 are rounded up to the larger integer.
 fn rounded_div(numerator: i64, denominator: i64) -> i64 {
     (numerator + (denominator / 2)) / denominator
@@ -19,29 +19,29 @@ fn rounded_div(numerator: i64, denominator: i64) -> i64 {
 fn human_duration(d: Duration) -> String {
     let milli = d.num_milliseconds();
     if milli < 1000 {
-        return format!("{} milliseconds", milli);
+        return format!("{} ms", milli);
     };
 
     let mut seconds = rounded_div(milli, 1000);
     if seconds < 60 {
-        return format!("{} seconds", seconds);
+        return format!("{} s", seconds);
     };
 
     let mut minutes = seconds / 60;
     seconds -= minutes * 60;
     if minutes < 60 {
-        return format!("{} minutes {} seconds", minutes, seconds);
+        return format!("{} min {} s", minutes, seconds);
     };
 
     let mut hours = minutes / 60;
     minutes = minutes - (hours * 60) + rounded_div(seconds, 60);
     if hours < 24 {
-        return format!("{} hours {} minutes", hours, minutes);
+        return format!("{} hr {} min", hours, minutes);
     };
 
     let days = hours / 24;
     hours = hours - days * 24 + rounded_div(minutes, 60);
-    format!("{} days {} hours", days, hours)
+    format!("{} day {} hr", days, hours)
 }
 
 /// Task which started at a certain time but is still ongoing.
@@ -119,10 +119,14 @@ impl fmt::Display for CurrentTask {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "project: {}, started at: {}, duration {}",
-            self.project_name,
+            "| {: <17} | {: <15} | {: <25} | {:0.50}",
             self.start_time.naive_local().format("%R %v").to_string(),
-            human_duration(self.duration())
+            human_duration(self.duration()),
+            self.project_name,
+            match &self.description {
+                Some(d) => d,
+                None => "",
+            }
         )
     }
 }
@@ -190,11 +194,15 @@ impl fmt::Display for Task {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "project: {}, started at: {}, ended at: {}, duration {}",
-            self.project_name,
+            "| {: <17} | {: <17} | {: <15} | {: <25} | {:0.50}",
             self.start_time.naive_local().format("%R %v").to_string(),
             self.end_time.naive_local().format("%R %v").to_string(),
-            human_duration(self.duration())
+            human_duration(self.duration()),
+            self.project_name,
+            match &self.description {
+                Some(d) => d,
+                None => "",
+            }
         )
     }
 }
