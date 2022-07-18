@@ -1,6 +1,8 @@
 //! Functionality for the command-line interface.
 use anyhow::Result;
-use chrono::{DateTime, Duration, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use chrono::{
+    DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc, Weekday,
+};
 use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::{database, tasks, CurrentTask, DataFiles, Task};
@@ -172,15 +174,53 @@ pub fn view(files: &DataFiles, filter: &ViewFilter) -> Result<()> {
             let t = CurrentTask::load(files.current_file())?;
             println!("Current task: {}", t);
         }
+
         ViewFilter::All => {
             let t = database::extract_all_tasks(&files.database_file)?;
             display_tasks(&t);
         }
+
         ViewFilter::Day => {
             let t =
                 database::extract_tasks(&files.database_file, today, today + Duration::days(1))?;
             display_tasks(&t);
         }
+
+        ViewFilter::Week => {
+            let mon = NaiveDate::from_isoywd(today.year(), today.iso_week().week(), Weekday::Mon)
+                .and_hms(0, 0, 0);
+            let sun = NaiveDate::from_isoywd(today.year(), today.iso_week().week(), Weekday::Sun)
+                .and_hms(0, 0, 0);
+
+            let t = database::extract_tasks(
+                &files.database_file,
+                Utc.from_utc_datetime(&mon),
+                Utc.from_utc_datetime(&sun),
+            )?;
+            display_tasks(&t);
+        }
+
+        ViewFilter::Month => {
+            let first = today
+                .with_day(1)
+                .expect("always valid because all months have a day 1");
+
+            let last = match today.month() {
+                12 => today
+                    .with_day(31)
+                    .expect("December always has 31 days so this will be valid"),
+                m => {
+                    today
+                        .with_month(m + 1)
+                        .expect("m + 1 will always be a valid month")
+                        - Duration::days(1)
+                }
+            };
+
+            let t = database::extract_tasks(&files.database_file, first, last)?;
+            display_tasks(&t);
+        }
+
         _ => println!("Not yet implemented view: {:?}", filter),
     };
 
