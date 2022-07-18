@@ -283,15 +283,15 @@ mod tests {
     }
 
     #[test]
-    fn test_human_readable() {
+    fn test_human_duration() {
         let durations = [
-            (Duration::milliseconds(947), "947 milliseconds"),
-            (Duration::milliseconds(1947), "2 seconds"),
-            (Duration::seconds(57), "57 seconds"),
-            (Duration::seconds(157), "2 minutes 37 seconds"),
-            (Duration::seconds(4734), "1 hours 19 minutes"),
-            (Duration::seconds(92750), "1 days 2 hours"),
-            (Duration::hours(173), "7 days 5 hours"),
+            (Duration::milliseconds(947), "947 ms"),
+            (Duration::milliseconds(1947), "2 s"),
+            (Duration::seconds(57), "57 s"),
+            (Duration::seconds(157), "2 min 37 s"),
+            (Duration::seconds(4734), "1 hr 19 min"),
+            (Duration::seconds(92750), "1 day 2 hr"),
+            (Duration::hours(173), "7 day 5 hr"),
         ];
 
         for (d, a) in durations {
