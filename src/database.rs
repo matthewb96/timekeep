@@ -66,12 +66,10 @@ fn parse_database_datetime(s: String) -> Result<DateTime<Utc>> {
     Ok(DateTime::<Utc>::from(DateTime::parse_from_rfc3339(&s)?))
 }
 
-/// Extract all tasks from database.
-pub fn extract_all_tasks(file: &Path) -> Result<Vec<Task>> {
+fn extract_tasks_query(file: &Path, query: &str) -> Result<Vec<Task>> {
     let connection = Connection::open(&file)?;
 
-    let mut stmt =
-        connection.prepare("SELECT project_name, start_time, end_time, description FROM tasks;")?;
+    let mut stmt = connection.prepare(query)?;
 
     let mut errors = vec![];
     let tasks: Vec<Task> = stmt
@@ -96,5 +94,22 @@ pub fn extract_all_tasks(file: &Path) -> Result<Vec<Task>> {
     Ok(tasks)
 }
 
-// TODO Implement getting tasks based on date filter
-fn extract_tasks(file: &Path, from: DateTime<Utc>, to: DateTime<Utc>) {}
+/// Extract all tasks from database.
+pub fn extract_all_tasks(file: &Path) -> Result<Vec<Task>> {
+    extract_tasks_query(
+        file,
+        "SELECT project_name, start_time, end_time, description FROM tasks;",
+    )
+}
+
+/// Extract tasks from database with a start time between `from` and `to`.
+pub fn extract_tasks(file: &Path, from: DateTime<Utc>, to: DateTime<Utc>) -> Result<Vec<Task>> {
+    extract_tasks_query(
+        file, 
+        &format!(
+            "SELECT project_name, start_time, end_time, description FROM tasks WHERE start_time >= '{}' and start_time < '{}';",
+            from.to_rfc3339(),
+            to.to_rfc3339(),
+        )
+    )
+}

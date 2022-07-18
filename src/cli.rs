@@ -1,6 +1,6 @@
 //! Functionality for the command-line interface.
 use anyhow::Result;
-use chrono::{DateTime, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::{database, tasks, CurrentTask, DataFiles, Task};
@@ -165,6 +165,8 @@ pub fn add(
 
 // TODO Add arguments for viewing different results from the database based on start / end time
 pub fn view(files: &DataFiles, filter: &ViewFilter) -> Result<()> {
+    let today: DateTime<Utc> = Utc::today().and_hms(0, 0, 0);
+
     match filter {
         ViewFilter::Current => {
             let t = CurrentTask::load(files.current_file())?;
@@ -172,6 +174,11 @@ pub fn view(files: &DataFiles, filter: &ViewFilter) -> Result<()> {
         }
         ViewFilter::All => {
             let t = database::extract_all_tasks(&files.database_file)?;
+            display_tasks(&t);
+        }
+        ViewFilter::Day => {
+            let t =
+                database::extract_tasks(&files.database_file, today, today + Duration::days(1))?;
             display_tasks(&t);
         }
         _ => println!("Not yet implemented view: {:?}", filter),
@@ -182,6 +189,7 @@ pub fn view(files: &DataFiles, filter: &ViewFilter) -> Result<()> {
 
 /// Print tasks to screen in a simple table structure.
 fn display_tasks(tasks: &Vec<Task>) {
+    println!("Found {} tasks", tasks.len());
     println!(
         "| {: <17} | {: <17} | {: <15} | {: <25} | {:0.50}",
         "From", "To", "Duration", "Project Name", "Description"
