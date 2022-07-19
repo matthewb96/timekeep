@@ -189,14 +189,9 @@ pub fn view(files: &DataFiles, filter: &ViewFilter) -> Result<()> {
         ViewFilter::Week => {
             let mon = NaiveDate::from_isoywd(today.year(), today.iso_week().week(), Weekday::Mon)
                 .and_hms(0, 0, 0);
-            let sun = NaiveDate::from_isoywd(today.year(), today.iso_week().week(), Weekday::Sun)
-                .and_hms(0, 0, 0);
+            let mon = Utc.from_utc_datetime(&mon);
 
-            let t = database::extract_tasks(
-                &files.database_file,
-                Utc.from_utc_datetime(&mon),
-                Utc.from_utc_datetime(&sun),
-            )?;
+            let t = database::extract_tasks(&files.database_file, mon, mon + Duration::days(7))?;
             display_tasks(&t);
         }
 
@@ -205,23 +200,33 @@ pub fn view(files: &DataFiles, filter: &ViewFilter) -> Result<()> {
                 .with_day(1)
                 .expect("always valid because all months have a day 1");
 
-            let last = match today.month() {
-                12 => today
-                    .with_day(31)
-                    .expect("December always has 31 days so this will be valid"),
-                m => {
-                    today
-                        .with_month(m + 1)
-                        .expect("m + 1 will always be a valid month")
-                        - Duration::days(1)
-                }
+            let last = match first.month() {
+                12 => first // First day of the next year
+                    .with_year(today.year() + 1)
+                    .expect("invalid year")
+                    .with_month(1)
+                    .expect("hardcoded valid month"),
+
+                m => first // First day of the next month
+                    .with_month(m + 1)
+                    .expect("m + 1 will always be a valid month"),
             };
 
             let t = database::extract_tasks(&files.database_file, first, last)?;
             display_tasks(&t);
         }
 
-        _ => println!("Not yet implemented view: {:?}", filter),
+        ViewFilter::Year => {
+            let first = today
+                .with_month(1)
+                .expect("hardcoded valid month")
+                .with_day(1)
+                .expect("hardcoded valid day");
+            let last = first.with_year(first.year() + 1).expect("invalid year");
+
+            let t = database::extract_tasks(&files.database_file, first, last)?;
+            display_tasks(&t);
+        }
     };
 
     Ok(())
