@@ -1,5 +1,5 @@
 //! Functionality for the command-line interface.
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use chrono::{
     DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc, Weekday,
 };
@@ -15,7 +15,7 @@ pub struct Cli {
     pub command: Commands,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ValueEnum, Clone, Debug, Copy)]
 pub enum ViewFilter {
     Current,
     All,
@@ -61,11 +61,17 @@ pub enum Commands {
         #[clap(short, long)]
         description: Option<String>,
     },
-    /// View current task or a group of tasks based on options given
+    /// View current task or a group of tasks based on filtering the task start time
     View {
-        /// Timescale filter for tasks to view
-        #[clap(value_enum, default_value_t = ViewFilter::Current)]
-        filter: ViewFilter,
+        /// Shortcut timescale filter, relative to today, for tasks to view
+        #[clap(value_enum)]
+        filter: Option<ViewFilter>,
+        /// Start date / time to get tasks from, if given filter is ignored
+        #[clap(short, long)]
+        from: Option<String>,
+        /// End date / time to get tasks before, if given filter is ignored
+        #[clap(short, long)]
+        to: Option<String>,
     },
     // TODO Add edit command
 }
@@ -122,20 +128,28 @@ pub fn end(files: &DataFiles, end_time: &Option<String>, discard: &bool) -> Resu
 
 /// Parse datetime string which doesn't include timezone, use local timezone.
 ///
-/// If date isn't given then today is used.
+/// If date isn't given then today is used, if time isn't given then 00:00:00
+/// is used.
 fn parse_local_datetime(text: &str) -> Result<DateTime<Utc>> {
-    // Attempt to parse datetime and fallback on parsing only time
+    // Attempt to parse datetime and fallback on parsing only date or time
     let datetime = NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")
         .or(NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M"));
 
     let datetime = match datetime {
         Ok(dt) => dt,
         Err(_) => {
-            // Parse string as time only and use today's date
-            let time = NaiveTime::parse_from_str(text, "%H:%M:%S")
-                .or(NaiveTime::parse_from_str(text, "%H:%M"))?;
+            // Parse string as date only
+            let date = NaiveDate::parse_from_str(text, "%Y-%m-%d");
 
-            NaiveDateTime::new(Utc::today().naive_utc(), time)
+            if date.is_ok() {
+                date.unwrap().and_hms(0, 0, 0)
+            } else {
+                // Parse string as time only and use today's date
+                let time = NaiveTime::parse_from_str(text, "%H:%M:%S")
+                    .or(NaiveTime::parse_from_str(text, "%H:%M"))?;
+
+                NaiveDateTime::new(Utc::today().naive_utc(), time)
+            }
         }
     };
 
@@ -165,25 +179,16 @@ pub fn add(
     Ok(())
 }
 
-// TODO Add arguments for viewing different results from the database based on start / end time
-pub fn view(files: &DataFiles, filter: &ViewFilter) -> Result<()> {
+fn view_filter_shortcut(files: &DataFiles, filter: ViewFilter) -> Result<Vec<Task>> {
     let today: DateTime<Utc> = Utc::today().and_hms(0, 0, 0);
 
     match filter {
-        ViewFilter::Current => {
-            let t = CurrentTask::load(files.current_file())?;
-            println!("Current task: {}", t);
-        }
+        ViewFilter::Current => Err(anyhow!("cannot view current task in table")),
 
-        ViewFilter::All => {
-            let t = database::extract_all_tasks(&files.database_file)?;
-            display_tasks(&t);
-        }
+        ViewFilter::All => database::extract_all_tasks(&files.database_file),
 
         ViewFilter::Day => {
-            let t =
-                database::extract_tasks(&files.database_file, today, today + Duration::days(1))?;
-            display_tasks(&t);
+            database::extract_tasks(&files.database_file, today, today + Duration::days(1))
         }
 
         ViewFilter::Week => {
@@ -191,8 +196,7 @@ pub fn view(files: &DataFiles, filter: &ViewFilter) -> Result<()> {
                 .and_hms(0, 0, 0);
             let mon = Utc.from_utc_datetime(&mon);
 
-            let t = database::extract_tasks(&files.database_file, mon, mon + Duration::days(7))?;
-            display_tasks(&t);
+            database::extract_tasks(&files.database_file, mon, mon + Duration::days(7))
         }
 
         ViewFilter::Month => {
@@ -212,8 +216,7 @@ pub fn view(files: &DataFiles, filter: &ViewFilter) -> Result<()> {
                     .expect("m + 1 will always be a valid month"),
             };
 
-            let t = database::extract_tasks(&files.database_file, first, last)?;
-            display_tasks(&t);
+            database::extract_tasks(&files.database_file, first, last)
         }
 
         ViewFilter::Year => {
@@ -224,10 +227,57 @@ pub fn view(files: &DataFiles, filter: &ViewFilter) -> Result<()> {
                 .expect("hardcoded valid day");
             let last = first.with_year(first.year() + 1).expect("invalid year");
 
-            let t = database::extract_tasks(&files.database_file, first, last)?;
-            display_tasks(&t);
+            database::extract_tasks(&files.database_file, first, last)
         }
+    }
+}
+
+/// View task, or group of tasks, based on start time filtering
+pub fn view(
+    files: &DataFiles,
+    filter: Option<ViewFilter>,
+    from: &Option<String>,
+    to: &Option<String>,
+) -> Result<()> {
+    let tasks = if from.is_none() & to.is_none() {
+        // Use filter if after or before aren't given
+        let filter = filter.unwrap_or(ViewFilter::Current);
+
+        if matches!(filter, ViewFilter::Current) {
+            let t = CurrentTask::load(files.current_file())?;
+            println!("Current task: {}", t);
+            return Ok(());
+        }
+
+        view_filter_shortcut(files, filter)?
+    } else {
+        let from = match from {
+            Some(s) => parse_local_datetime(s)?,
+            None => Utc.ymd(0, 1, 1).and_hms(0, 0, 0),
+        };
+        let to = match to {
+            Some(s) => parse_local_datetime(s)?,
+            None => Utc.ymd(9999, 1, 1).and_hms(0, 0, 0),
+        };
+
+        println!(
+            "Showing results from {} - {}",
+            from.to_rfc2822(),
+            to.to_rfc2822()
+        );
+
+        if from > to {
+            return Err(anyhow!(
+                "from should be less than to, not {} and {}",
+                from.to_rfc2822(),
+                to.to_rfc2822()
+            ));
+        }
+
+        database::extract_tasks(&files.database_file, from, to)?
     };
+
+    display_tasks(&tasks);
 
     Ok(())
 }
@@ -268,6 +318,7 @@ mod tests {
             "2022-2-1 1:2",
             NaiveDate::from_ymd(2022, 2, 1).and_hms(1, 2, 0),
         ));
+        tests.push(("2022-2-1", NaiveDate::from_ymd(2022, 2, 1).and_hms(0, 0, 0)));
 
         for (s, t) in tests {
             let t = Utc.from_local_datetime(&t).unwrap();

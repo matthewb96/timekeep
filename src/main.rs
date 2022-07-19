@@ -25,7 +25,7 @@ fn main() -> Result<()> {
             end_time,
             description,
         } => cli::add(&files, project_name, start_time, end_time, description)?,
-        Commands::View { filter } => cli::view(&files, filter)?,
+        Commands::View { filter, from, to } => cli::view(&files, *filter, from, to)?,
     };
 
     Ok(())
